@@ -24,6 +24,7 @@ class InterfazGrafica:
             Proceso(2, "word.exe", 256, self.generar_instrucciones(80)),
             Proceso(3, "excel.exe", 320, self.generar_instrucciones(70))
         ]
+        self.proceso_seleccionado = None
     
     def generar_instrucciones(self, cantidad):
         """Genera instrucciones aleatorias para simulación"""
@@ -142,6 +143,7 @@ class InterfazGrafica:
             instrucciones = self.generar_instrucciones(tamano // 4)
             nuevo_proceso = Proceso(nuevo_id, nombre, tamano, instrucciones)
             self.procesos.append(nuevo_proceso)
+            self.proceso_seleccionado = nuevo_proceso
             
             messagebox.showinfo("Éxito", f"Programa {nombre} cargado exitosamente\nTamaño: {tamano} KB")
     
@@ -162,6 +164,7 @@ class InterfazGrafica:
             nuevo_id = max([p.id for p in self.procesos], default=0) + 1
             nuevo_proceso = Proceso(nuevo_id, nombre, tamano, instrucciones)
             self.procesos.append(nuevo_proceso)
+            self.proceso_seleccionado = nuevo_proceso
             
             messagebox.showinfo("Éxito", f"Programa {nombre} ensamblado y cargado\nTamaño: {tamano} KB")
     
@@ -185,6 +188,7 @@ class InterfazGrafica:
         nuevo_id = max([p.id for p in self.procesos], default=0) + 1
         nuevo_proceso = Proceso(nuevo_id, programa, tamano, instrucciones)
         self.procesos.append(nuevo_proceso)
+        self.proceso_seleccionado = nuevo_proceso
         
         messagebox.showinfo("Éxito", f"Programa {programa} cargado\nTamaño: {tamano} KB")
     
@@ -287,6 +291,28 @@ class InterfazGrafica:
         ttk.Label(cache_frame, text="L1 - Tasa Impactos:").grid(row=1, column=0, sticky=tk.W)
         self.label_cache_l1_tasa = ttk.Label(cache_frame, text="0%")
         self.label_cache_l1_tasa.grid(row=1, column=1, sticky=tk.W)
+
+        # Tabla de procesos
+        procesos_frame = ttk.LabelFrame(estado_frame, text="Procesos", padding="5")
+        procesos_frame.grid(row=5, column=0, columnspan=2, sticky=(tk.W, tk.E, tk.N, tk.S), pady=(10, 0))
+        columnas = ("pid", "nombre", "tamano", "estado")
+        self.tree_procesos = ttk.Treeview(procesos_frame, columns=columnas, show='headings', height=6)
+        self.tree_procesos.heading("pid", text="PID")
+        self.tree_procesos.heading("nombre", text="Nombre")
+        self.tree_procesos.heading("tamano", text="Tamaño (KB)")
+        self.tree_procesos.heading("estado", text="Estado")
+        self.tree_procesos.column("pid", width=40, anchor=tk.CENTER)
+        self.tree_procesos.column("nombre", width=120)
+        self.tree_procesos.column("tamano", width=80, anchor=tk.CENTER)
+        self.tree_procesos.column("estado", width=90, anchor=tk.CENTER)
+        self.tree_procesos.grid(row=0, column=0, sticky=(tk.W, tk.E, tk.N, tk.S))
+
+        scrollbar_proc = ttk.Scrollbar(procesos_frame, orient=tk.VERTICAL, command=self.tree_procesos.yview)
+        scrollbar_proc.grid(row=0, column=1, sticky=(tk.N, tk.S))
+        self.tree_procesos.configure(yscrollcommand=scrollbar_proc.set)
+
+        procesos_frame.columnconfigure(0, weight=1)
+        procesos_frame.rowconfigure(0, weight=1)
     
     def crear_panel_memoria(self, parent):
         """Crea el panel de visualización de memoria"""
@@ -355,6 +381,16 @@ class InterfazGrafica:
             self.label_ciclos.config(text=str(estado_micro['ciclos']))
             programa_actual = estado_micro.get('programa', 'Ninguno')
             self.label_programa.config(text=programa_actual)
+
+            # Actualizar tabla de procesos
+            if hasattr(self, 'tree_procesos'):
+                for item in self.tree_procesos.get_children():
+                    self.tree_procesos.delete(item)
+                for p in self.procesos:
+                    self.tree_procesos.insert(
+                        '', tk.END,
+                        values=(p.id, p.nombre, p.tamano, p.estado)
+                    )
             
             # Actualizar cache
             stats_l1 = self.micro.cache_l1.obtener_estadisticas()
@@ -442,10 +478,17 @@ class InterfazGrafica:
         self.ejecutando = True
         self.memoria.algoritmo_reemplazo = self.algoritmo_var.get()
         
-        # Cargar primer proceso si no hay ninguno
+        # Cargar proceso seleccionado o el primero disponible si no hay ninguno
         if not self.micro.programa_actual and self.procesos:
-            self.micro.cargar_programa(self.procesos[0])
-            self.memoria.asignar_memoria(self.procesos[0], self.procesos[0].tamano)
+            candidato = self.proceso_seleccionado
+            if not candidato or candidato.estado == "TERMINADO":
+                # Buscar el primer proceso no terminado
+                pendientes = [p for p in self.procesos if p.estado != "TERMINADO"]
+                candidato = pendientes[0] if pendientes else None
+            if candidato:
+                self.micro.cargar_programa(candidato)
+                self.memoria.asignar_memoria(candidato, candidato.tamano)
+                candidato.estado = "EJECUTANDO"
         
         # Iniciar hilo de simulación
         thread = threading.Thread(target=self.ejecutar_simulacion_automatica)
@@ -457,11 +500,11 @@ class InterfazGrafica:
         while self.ejecutando and self.root and self.root.winfo_exists():
             self.ejecutar_paso()
             time.sleep(1.0 / self.velocidad_var.get())
-    
+
     def pausar_simulacion(self):
         """Pausa la simulación"""
         self.ejecutando = False
-    
+
     def ejecutar_paso(self):
         """Ejecuta un paso de la simulación"""
         try:
@@ -469,10 +512,19 @@ class InterfazGrafica:
                 instruccion = self.micro.programa_actual.ejecutar_siguiente()
                 if instruccion is not None:
                     self.micro.ejecutar_instruccion(instruccion)
-                    
-                    # Simular acceso a memoria
-                    direccion = random.randint(0, self.micro.programa_actual.tamano * 1024)
-                    self.memoria.acceder_memoria(direccion, self.micro.programa_actual.id)
+
+                    # Simular acceso a memoria usando MMU
+                    tamano_bytes = self.micro.programa_actual.tamano * 1024
+                    if tamano_bytes > 0:
+                        direccion_logica = random.randint(0, tamano_bytes - 1)
+                        direccion_fisica = self.micro.mmu.traducir_direccion(
+                            direccion_logica,
+                            self.micro.programa_actual.id
+                        )
+
+                        # Elegir operación de memoria (lectura/escritura)
+                        operacion = 'escritura' if random.random() < 0.3 else 'lectura'
+                        self.memoria.acceder_memoria(direccion_fisica, self.micro.programa_actual.id, operacion)
                 else:
                     # Proceso terminado, cargar siguiente
                     self.micro.programa_actual.estado = "TERMINADO"
@@ -480,7 +532,7 @@ class InterfazGrafica:
                     self.cargar_siguiente_proceso()
         except Exception as e:
             print(f"Error ejecutando paso: {e}")
-    
+
     def cargar_siguiente_proceso(self):
         """Carga el siguiente proceso en cola"""
         try:

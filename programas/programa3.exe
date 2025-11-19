@@ -5,5 +5,5 @@ PROGRAMA_EXCEL = [
     0x02010119,  # ADD AX, 25
     0x02020219,  # ADD BX, 25
     0x04000300,  # JMP 768
-    # ... más instrucciones
+   
 ]
