@@ -4,7 +4,7 @@ class Microprocesador:
     """Simula la Unidad Central de Procesamiento (CPU)"""
     
     def __init__(self):
-        # Registros principales
+        # Registros principales (simulados)
         self.registros = {
             'AX': 0,  # Acumulador
             'BX': 0,  # Base
@@ -91,7 +91,6 @@ class Microprocesador:
             'programa': self.programa_actual.nombre if self.programa_actual else None
         }
 
-
 class Cache:
     """Simula la memoria cache del procesador"""
     
@@ -127,7 +126,6 @@ class Cache:
             'tasa_impactos': tasa_impactos,
             'tamano_utilizado': len(self.datos) * 4  # bytes
         }
-
 
 class MMU:
     """Unidad de Gestión de Memoria"""

@@ -1,17 +1,19 @@
 import random
 from collections import OrderedDict, deque
+import psutil
 
 class Proceso:
-    """Representa un proceso en el sistema"""
+    """Representa un proceso en el sistema con datos reales"""
     
     def __init__(self, id, nombre, tamano, instrucciones=None):
         self.id = id
         self.nombre = nombre
         self.tamano = tamano  # en KB
-        self.estado = "NUEVO"  # NUEVO, LISTO, EJECUTANDO, TERMINADO
+        self.estado = "NUEVO"  # NUEVO, LISTO, EJECUTANDO, TERMINADO, MONITOREANDO
         self.instrucciones = instrucciones or []
         self.direccion_inicio = 0
         self.contador_programa = 0
+        self.proceso_real = None  # Referencia al objeto psutil.Process
     
     def ejecutar_siguiente(self):
         """Ejecuta la siguiente instrucción"""
@@ -26,7 +28,7 @@ class Proceso:
         return self.contador_programa >= len(self.instrucciones)
 
 class SistemaMemoria:
-    """Sistema completo de gestión de memoria"""
+    """Sistema completo de gestión de memoria con datos reales"""
     
     def __init__(self, config):
         self.config = config
@@ -52,6 +54,29 @@ class SistemaMemoria:
             'fragmentacion_interna': 0
         }
     
+    def obtener_estadisticas_reales(self):
+        """Obtiene estadísticas reales del sistema"""
+        try:
+            memoria = psutil.virtual_memory()
+            swap = psutil.swap_memory()
+            
+            return {
+                'memoria_total': memoria.total // 1024,  # KB
+                'memoria_utilizada': memoria.used // 1024,
+                'memoria_libre': memoria.available // 1024,
+                'porcentaje_memoria': memoria.percent,
+                'swap_total': swap.total // 1024,
+                'swap_utilizado': swap.used // 1024,
+                'porcentaje_swap': swap.percent,
+                'accesos_memoria': self.estadisticas['accesos_memoria'],
+                'fallos_pagina': self.estadisticas['fallos_pagina'],
+                'tasa_fallos_pagina': (self.estadisticas['fallos_pagina'] / 
+                                      self.estadisticas['accesos_memoria'] * 100) if self.estadisticas['accesos_memoria'] > 0 else 0
+            }
+        except:
+            return self.obtener_estadisticas()
+
+    # ... (resto de métodos se mantienen igual)
     def asignar_memoria(self, proceso, tamano):
         """Asigna memoria a un proceso"""
         proceso_id = proceso.id
@@ -133,14 +158,32 @@ class SistemaMemoria:
         tasa_fallos = (self.estadisticas['fallos_pagina'] / 
                       self.estadisticas['accesos_memoria'] * 100) if self.estadisticas['accesos_memoria'] > 0 else 0
         
-        return {
+        estado = self.obtener_estado_memoria()
+        estadisticas = {
             **self.estadisticas,
             'tasa_fallos_pagina': tasa_fallos,
             'memoria_total': self.config['tamano_memoria_principal'],
-            'memoria_utilizada': self.paginacion.memoria_utilizada if self.modo_memoria == 'paginacion' else self.segmentacion.memoria_utilizada
+            'memoria_utilizada': estado.get('memoria_utilizada', 0),
+            'modo_memoria': self.modo_memoria,
+            'algoritmo_reemplazo': self.algoritmo_reemplazo,
+            'paginas_swap': getattr(self.memoria_virtual, 'paginas_swap', 0),
+            'tamano_memoria_virtual': getattr(self.memoria_virtual, 'tamano_memoria_virtual', 0)
         }
 
+        # Datos específicos según modo de memoria
+        if estado.get('tipo') == 'PAGINACION':
+            estadisticas.update({
+                'paginas_activas': estado.get('paginas_activas', 0),
+                'marcos_ocupados': estado.get('marcos_ocupados', 0)
+            })
+        elif estado.get('tipo') == 'SEGMENTACION':
+            estadisticas.update({
+                'segmentos_activos': estado.get('segmentos_activos', 0)
+            })
 
+        return estadisticas
+
+# ... (resto de clases se mantienen igual)
 class MemoriaPrincipal:
     """Simula la memoria principal (RAM)"""
     
@@ -167,7 +210,6 @@ class MemoriaPrincipal:
     def obtener_estado(self):
         """Retorna el estado de la memoria"""
         return self.estado
-
 
 class GestorPaginacion:
     """Gestiona memoria usando paginación"""
@@ -285,7 +327,6 @@ class GestorPaginacion:
         }
         return estado
 
-
 class GestorSegmentacion:
     """Gestiona memoria usando segmentación"""
     
@@ -334,7 +375,6 @@ class GestorSegmentacion:
             'memoria_utilizada': self.memoria_utilizada,
             'procesos': list(self.segmentos.keys())
         }
-
 
 class GestorMemoriaVirtual:
     """Gestiona memoria virtual"""
