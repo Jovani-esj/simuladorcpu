@@ -145,6 +145,12 @@ class InterfazGrafica:
             self.procesos.append(nuevo_proceso)
             self.proceso_seleccionado = nuevo_proceso
             
+            # Abrir realmente el ejecutable en el sistema (Windows)
+            try:
+                os.startfile(file_path)
+            except Exception as e:
+                print(f"No se pudo abrir el ejecutable real: {e}")
+            
             messagebox.showinfo("Éxito", f"Programa {nombre} cargado exitosamente\nTamaño: {tamano} KB")
     
     def cargar_asm(self):
