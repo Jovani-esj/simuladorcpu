@@ -1,0 +1,8 @@
+# Simulación de chrome.exe
+PROGRAMA_CHROME = [
+    0x01010100,  # MOV AX, 1
+    0x02020164,  # ADD AX, 100
+    0x0302010A,  # SUB AX, 10
+    0x04000100,  # JMP 256
+    # ... más instrucciones
+]

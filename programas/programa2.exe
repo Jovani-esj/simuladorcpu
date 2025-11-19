@@ -1,0 +1,8 @@
+# Simulación de word.exe
+PROGRAMA_WORD = [
+    0x01020200,  # MOV BX, 2
+    0x02020232,  # ADD BX, 50
+    0x0302020F,  # SUB BX, 15
+    0x04000200,  # JMP 512
+    # ... más instrucciones
+]
